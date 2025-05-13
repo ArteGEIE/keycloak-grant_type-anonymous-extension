@@ -1,7 +1,7 @@
 services:
   keycloak:
     image: quay.io/keycloak/keycloak:25.0.6
-    container_name: keycloak-keycloak-grant_type-anonymous
+    container_name: keycloak-keycloak-grant-type-anonymous
     environment:
       KEYCLOAK_ADMIN: admin
       KEYCLOAK_ADMIN_PASSWORD: password
@@ -18,7 +18,7 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - ./target/grant_type-anonymous-1.0.0-SNAPSHOT.jar:/opt/keycloak/providers/grant_type-anonymous.jar:z
+      - ./target/grant_type-anonymous-1.0.0-SNAPSHOT.jar:/opt/keycloak/providers/grant_type-anonymous-1.0.0-SNAPSHOT.jar:z
     depends_on:
       - keycloak-db
     networks:
