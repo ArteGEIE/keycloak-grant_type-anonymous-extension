@@ -1,0 +1,46 @@
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:25.0.6
+    container_name: keycloak-keycloak-grant_type-anonymous
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: password
+      KC_DB: postgres
+      KC_DB_PASSWORD: password
+      KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak
+      KC_DB_USERNAME: admin
+      KC_FEATURES: preview,scripts
+      KC_LOG_FORMAT: "%d{yyyy-MM-dd HH:mm:ss,SSS} %-5p [%c] (%t) %s%e%n"
+      KC_LOG_LEVEL: "INFO,org.hibernate:INFO,com.cloudiam:DEBUG,org.keycloak.authentication:DEBUG"
+
+    command:
+      - "start-dev"
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./target/grant_type-anonymous-1.0.0-SNAPSHOT.jar:/opt/keycloak/providers/grant_type-anonymous.jar:z
+    depends_on:
+      - keycloak-db
+    networks:
+      - keycloak-grant_type-anonymous-extension
+
+  keycloak-db:
+    image: postgres:16
+    networks:
+      - keycloak-grant_type-anonymous-extension
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: password
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  keycloak-grant_type-anonymous-extension:
+    name: keycloak-grant_type-anonymous-extension
