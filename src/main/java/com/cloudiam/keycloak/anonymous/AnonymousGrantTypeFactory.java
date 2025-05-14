@@ -9,10 +9,11 @@ import org.keycloak.protocol.oidc.grants.OAuth2GrantTypeFactory;
 
 public class AnonymousGrantTypeFactory implements OAuth2GrantTypeFactory {
     private static final Logger logger = Logger.getLogger(AnonymousGrantTypeFactory.class);
+    public static final String PROVIDER_ID = "anonymous";
 
     @Override
     public OAuth2GrantType create(KeycloakSession session) {
-        return new AnonymousGrantTypeProvider(session);
+        return new AnonymousGrantType(session);
     }
 
     @Override
@@ -32,7 +33,7 @@ public class AnonymousGrantTypeFactory implements OAuth2GrantTypeFactory {
 
     @Override
     public String getId() {
-        return AnonymousGrantTypeProvider.GRANT_TYPE;
+        return PROVIDER_ID;
     }
 
     @Override
