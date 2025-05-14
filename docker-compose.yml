@@ -1,7 +1,7 @@
 services:
   keycloak:
     image: quay.io/keycloak/keycloak:25.0.6
-    container_name: keycloak-keycloak-grant-type-anonymous
+    container_name: keycloak-grant-type-anonymous
     environment:
       KEYCLOAK_ADMIN: admin
       KEYCLOAK_ADMIN_PASSWORD: password
