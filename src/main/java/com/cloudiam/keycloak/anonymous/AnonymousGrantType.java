@@ -18,7 +18,7 @@ public class AnonymousGrantType implements OAuth2GrantType {
 
     private static final Logger LOGGER = Logger.getLogger(AnonymousGrantType.class);
     private final KeycloakSession session;
-    //private static final String ACCESS_TOKEN_LIFESPAN = 300;
+    private static final Integer ACCESS_TOKEN_LIFESPAN = 300;
 
     public AnonymousGrantType(KeycloakSession session) {
         this.session = session;
@@ -77,7 +77,8 @@ public class AnonymousGrantType implements OAuth2GrantType {
         LOGGER.info("******* ANONYMOUS GRANT TYPE START TOKEN GENERATION *******");
         AccessToken accessToken = new AccessToken();
         long currentTimeInSeconds = System.currentTimeMillis() / 1000;
-        accessToken.exp(currentTimeInSeconds + 300);
+        accessToken.exp(currentTimeInSeconds + ACCESS_TOKEN_LIFESPAN);
+
         AccessTokenResponse tokenResponse = new TokenManager().responseBuilder(
                 realm,
                 client,
@@ -91,9 +92,13 @@ public class AnonymousGrantType implements OAuth2GrantType {
         .build();
 
         tokenResponse = formatAccessTokenResponse(tokenResponse);
-
         LOGGER.info("******* ANONYMOUS GRANT TYPE TOKEN GENERATED SUCCESSFULLY *******");        
-        return Response.ok(tokenResponse).build();
+        Response response = Response.ok(tokenResponse).build();
+
+        // Delete the user after token creation
+        deleteTransientUser(realm, userSession.getUser());
+
+        return response;
     }
 
     private UserModel createTransientUser(RealmModel realm) {
@@ -105,14 +110,21 @@ public class AnonymousGrantType implements OAuth2GrantType {
         return user;
     }
 
+    private void deleteTransientUser(RealmModel realm, UserModel user) {
+        try {
+            session.users().removeUser(realm, user);
+        } catch (Exception e) {
+            LOGGER.error("Failed to delete user", e);
+        }
+    }
+
     private AccessTokenResponse formatAccessTokenResponse(AccessTokenResponse tokenResponse) {
         AccessTokenResponse customTokenResponse = new AccessTokenResponse();
         customTokenResponse.setTokenType("Bearer");
         customTokenResponse.setToken(tokenResponse.getToken());
-        customTokenResponse.setExpiresIn(300);
+        customTokenResponse.setExpiresIn(ACCESS_TOKEN_LIFESPAN);
         customTokenResponse.setScope("openid");
 
         return customTokenResponse;
     }
-        
 }
