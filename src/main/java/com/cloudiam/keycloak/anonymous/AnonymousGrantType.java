@@ -3,14 +3,14 @@ package com.cloudiam.keycloak.anonymous;
 import jakarta.ws.rs.core.Response;
 
 import org.jboss.logging.Logger;
-import org.keycloak.OAuthErrorException;
 import org.keycloak.events.EventBuilder;
 import org.keycloak.events.EventType;
 import org.keycloak.models.*;
 import org.keycloak.protocol.oidc.TokenManager;
 import org.keycloak.protocol.oidc.grants.OAuth2GrantType;
+import org.keycloak.representations.AccessToken;
 import org.keycloak.representations.AccessTokenResponse;
-import org.keycloak.services.ErrorResponseException;
+import org.keycloak.services.util.DefaultClientSessionContext;
 
 import java.util.UUID;
 
@@ -41,16 +41,18 @@ public class AnonymousGrantType implements OAuth2GrantType {
         RealmModel realm = session.getContext().getRealm();
         ClientModel client = session.getContext().getClient();
 
-        if (client == null || !client.isEnabled()) {
-            throw new ErrorResponseException(OAuthErrorException.INVALID_CLIENT,
-                    "Invalid client credentials", Response.Status.UNAUTHORIZED);
+        // Verify client ID
+        if (client != null && !client.getId().isEmpty()) {
+            LOGGER.info("Client ID exists: " + client.getId());
+        } else {
+            LOGGER.warn("Client ID does not exist or is invalid.");
+            return Response.status(Response.Status.BAD_REQUEST).entity("Invalid client ID").build();
         }
 
         UserModel transientUser = createTransientUser(realm);
         EventBuilder event = new EventBuilder(realm, session, session.getContext().getConnection());
         event.event(EventType.LOGIN);
 
-        //ClientSessionContext clientSessionCtx = DefaultClientSessionContext.fromClientSessionScopeParameter();
         UserSessionProvider userSessionProvider = session.getProvider(UserSessionProvider.class);
         UserSessionModel userSession = userSessionProvider.createUserSession(
             UUID.randomUUID().toString(),
@@ -65,20 +67,32 @@ public class AnonymousGrantType implements OAuth2GrantType {
             UserSessionModel.SessionPersistenceState.TRANSIENT
         );
 
-        // Build and return the token response
+        AuthenticatedClientSessionModel clientSession = session.sessions()
+        .createClientSession(realm, client, userSession);
+
+        ClientSessionContext clientSessionCtx = DefaultClientSessionContext.fromClientSessionAndScopeParameter(
+            clientSession, null, session
+        );
+
+        LOGGER.info("******* ANONYMOUS GRANT TYPE START TOKEN GENERATION *******");
+        AccessToken accessToken = new AccessToken();
+        long currentTimeInSeconds = System.currentTimeMillis() / 1000;
+        accessToken.exp(currentTimeInSeconds + 300);
         AccessTokenResponse tokenResponse = new TokenManager().responseBuilder(
-                        realm,
-                        client,
-                        event,
-                        session,
-                        userSession,
-                        null
-                )
-                .generateAccessToken()
-                .generateRefreshToken()
-                .generateIDToken()
-                .build();
-LOGGER.info("TOKEN TOTO" + tokenResponse.toString());
+                realm,
+                client,
+                event,
+                session,
+                userSession,
+                clientSessionCtx
+        )
+        .accessToken(accessToken)
+        .generateAccessToken()
+        .build();
+
+        tokenResponse = formatAccessTokenResponse(tokenResponse);
+
+        LOGGER.info("******* ANONYMOUS GRANT TYPE TOKEN GENERATED SUCCESSFULLY *******");        
         return Response.ok(tokenResponse).build();
     }
 
@@ -90,4 +104,15 @@ LOGGER.info("TOKEN TOTO" + tokenResponse.toString());
 
         return user;
     }
+
+    private AccessTokenResponse formatAccessTokenResponse(AccessTokenResponse tokenResponse) {
+        AccessTokenResponse customTokenResponse = new AccessTokenResponse();
+        customTokenResponse.setTokenType("Bearer");
+        customTokenResponse.setToken(tokenResponse.getToken());
+        customTokenResponse.setExpiresIn(300);
+        customTokenResponse.setScope("openid");
+
+        return customTokenResponse;
+    }
+        
 }
