@@ -12,6 +12,8 @@ import org.keycloak.representations.AccessToken;
 import org.keycloak.representations.AccessTokenResponse;
 import org.keycloak.services.util.DefaultClientSessionContext;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.UUID;
 
 public class AnonymousGrantType implements OAuth2GrantType {
@@ -91,9 +93,9 @@ public class AnonymousGrantType implements OAuth2GrantType {
         .generateAccessToken()
         .build();
 
-        tokenResponse = formatAccessTokenResponse(tokenResponse);
+        Map<String, Object> customTokenResponse = formatAccessTokenResponse(tokenResponse);
         LOGGER.info("******* ANONYMOUS GRANT TYPE TOKEN GENERATED SUCCESSFULLY *******");        
-        Response response = Response.ok(tokenResponse).build();
+        Response response = Response.ok(customTokenResponse).build();
 
         // Delete the user after token creation
         deleteTransientUser(realm, userSession.getUser());
@@ -118,12 +120,12 @@ public class AnonymousGrantType implements OAuth2GrantType {
         }
     }
 
-    private AccessTokenResponse formatAccessTokenResponse(AccessTokenResponse tokenResponse) {
-        AccessTokenResponse customTokenResponse = new AccessTokenResponse();
-        customTokenResponse.setTokenType("Bearer");
-        customTokenResponse.setToken(tokenResponse.getToken());
-        customTokenResponse.setExpiresIn(ACCESS_TOKEN_LIFESPAN);
-        customTokenResponse.setScope("openid");
+    private Map<String, Object> formatAccessTokenResponse(AccessTokenResponse tokenResponse) {
+        Map<String, Object> customTokenResponse = new HashMap<>();
+        customTokenResponse.put("token_type", "Bearer");
+        customTokenResponse.put("access_token", tokenResponse.getToken());
+        customTokenResponse.put("expires_in", ACCESS_TOKEN_LIFESPAN);
+        customTokenResponse.put("scope", "openid");
 
         return customTokenResponse;
     }
