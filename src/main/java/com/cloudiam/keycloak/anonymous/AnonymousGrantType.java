@@ -43,13 +43,8 @@ public class AnonymousGrantType implements OAuth2GrantType {
         RealmModel realm = session.getContext().getRealm();
         ClientModel client = session.getContext().getClient();
 
-        // Verify client ID
-        if (client != null && !client.getId().isEmpty()) {
-            LOGGER.info("Client ID exists: " + client.getId());
-        } else {
-            LOGGER.warn("Client ID does not exist or is invalid.");
-            return Response.status(Response.Status.BAD_REQUEST).entity("Invalid client ID").build();
-        }
+        // Verify client exists
+        validateClient(client, realm);
 
         UserModel transientUser = createTransientUser(realm);
         EventBuilder event = new EventBuilder(realm, session, session.getContext().getConnection());
@@ -128,5 +123,22 @@ public class AnonymousGrantType implements OAuth2GrantType {
         customTokenResponse.put("scope", "openid");
 
         return customTokenResponse;
+    }
+
+    private void validateClient(ClientModel client, RealmModel realm) {
+        if (client == null || realm == null) {
+            LOGGER.warn("Client or realm is null");
+            throw new RuntimeException("Client or realm not found");
+        }
+
+        if(realm.getClientById(client.getId()) == null) {
+            LOGGER.warnf("Client %s not found", client.getId());
+            throw new RuntimeException("Client not found");
+        }
+
+        if (!client.isEnabled()) {
+            LOGGER.warnf("Client %s is not available", client.getId());
+            throw new RuntimeException("Client is disabled");
+        }
     }
 }
