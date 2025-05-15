@@ -6,8 +6,6 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Collections;
 
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.keycloak.admin.client.Keycloak;
@@ -25,6 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 @Testcontainers
 public class AnonymousGrantTypeTests {
+    private static final String GRANT_TYPE = "anonymous";
     private static final Network SHARED_NETWORK = Network.newNetwork();
     private static final String ADMIN_USER = "admin";
     private static final String ADMIN_PASSWORD = "admin";
@@ -66,7 +65,7 @@ public class AnonymousGrantTypeTests {
             String tokenUrl = keycloakUrl + "/realms/" + REALM_NAME + "/protocol/openid-connect/token";
 
             Map<String, String> params = new HashMap<>();
-            params.put("grant_type", "anonymous");
+            params.put("grant_type", GRANT_TYPE);
             params.put("client_id", CLIENT_NAME);
 
             Response response = given()
@@ -81,7 +80,7 @@ public class AnonymousGrantTypeTests {
             String tokenUrl = keycloakUrl + "/realms/" + REALM_NAME + "/protocol/openid-connect/token";
 
             Map<String, String> params = new HashMap<>();
-            params.put("grant_type", "anonymous");
+            params.put("grant_type", GRANT_TYPE);
             params.put("client_id", CLIENT_NAME);
 
             Response response = given()
@@ -150,7 +149,7 @@ public class AnonymousGrantTypeTests {
             String tokenUrl = keycloakUrl + "/realms/" + REALM_NAME + "/protocol/openid-connect/token";
 
             Map<String, String> params = new HashMap<>();
-            params.put("grant_type", "anonymous");
+            params.put("grant_type", GRANT_TYPE);
             params.put("client_id", "invalidClientId");
 
             Response response = given()
@@ -165,6 +164,7 @@ public class AnonymousGrantTypeTests {
     @BeforeEach
     void setup() {
         keycloak.start();
+
         String host = keycloak.getHost();
         Integer port = keycloak.getMappedPort(KEYCLOAK_PORT);
         keycloakUrl = String.format("http://%s:%d", host, port);
@@ -191,40 +191,6 @@ public class AnonymousGrantTypeTests {
 
         ClientRepresentation disabledClient = createDisabledClient();
         adminClient.realm(REALM_NAME).clients().create(disabledClient);
-    }
-    
-    @AfterEach
-    void cleanup() {
-        if (adminClient != null) {
-            try {
-                // Clean up test realms
-                adminClient.realms().findAll().stream()
-                    .filter(realm -> realm.getRealm().startsWith("test-"))
-                    .forEach(realm -> adminClient.realm(realm.getRealm()).remove());
-            } finally {
-                try {
-                    adminClient.close();
-                } catch (Exception e) {
-                    // Ignore exceptions during close
-                }
-                adminClient = null;
-            }
-        }
-    }
-    
-    @AfterAll
-    static void tearDown() {
-        if (keycloak != null && keycloak.isRunning()) {
-            keycloak.stop();
-        }
-        
-        try {
-            if (SHARED_NETWORK != null) {
-                SHARED_NETWORK.close();
-            }
-        } catch (Exception e) {
-            // Ignore exceptions during network close
-        }
     }
 
     private ClientRepresentation createClient() {
@@ -260,7 +226,7 @@ public class AnonymousGrantTypeTests {
 
     private ClientRepresentation createDisabledClient() {
         ClientRepresentation client = new ClientRepresentation();
-        client.setClientId(CLIENT_NAME);
+        client.setClientId(DISABLED_CLIENT_NAME);
         client.setDirectAccessGrantsEnabled(true);
         client.setStandardFlowEnabled(true);
         client.setPublicClient(true);
