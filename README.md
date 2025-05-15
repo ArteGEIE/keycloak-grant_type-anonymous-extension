@@ -27,3 +27,15 @@ This project is a Keycloak extension that adds anonymous grant type support. Fol
    ```bash
    docker-compose up
    ```
+
+4. **Access token format**
+
+   ```json
+   {
+      "token_type": "Bearer",
+      "access_token": "<access_token>",
+      "expires_in": 300,
+      "scope": "openid"
+   }    
+   ```
+   
