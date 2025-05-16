@@ -5,9 +5,12 @@ import io.restassured.response.Response;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Collections;
+import java.util.stream.Stream;
+import org.junit.jupiter.params.provider.Arguments;
 
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.keycloak.admin.client.Keycloak;
 import org.keycloak.admin.client.KeycloakBuilder;
 import org.keycloak.representations.idm.ClientRepresentation;
@@ -15,7 +18,6 @@ import org.testcontainers.containers.Network;
 import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.utility.MountableFile;
 
 import static io.restassured.RestAssured.given;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -32,9 +34,10 @@ public class AnonymousGrantTypeTests {
     private static final String PRIVATE_CLIENT_NAME = "private-client";
     private static final String DISABLED_CLIENT_NAME = "disabled-client";
     private static final String REALM_NAME = "master";
+    private static final String TOKEN_URL = "/realms/" + REALM_NAME + "/protocol/openid-connect/token";
 
     private static String keycloakUrl;
-    private Keycloak adminClient;
+    private static Keycloak adminClient;
 
     @Container
     private static final KeycloakContainer keycloak = new KeycloakContainer("quay.io/keycloak/keycloak:25.0.6")
@@ -48,10 +51,7 @@ public class AnonymousGrantTypeTests {
             .withEnv("KC_HOSTNAME_STRICT", "false")
             .withEnv("KC_HOSTNAME_STRICT_HTTPS", "false")
             .withEnv("KC_HTTP_PORT", String.valueOf(KEYCLOAK_PORT))
-            .withCopyFileToContainer(
-                    MountableFile.forHostPath("target/grant_type-anonymous-1.0.0-SNAPSHOT.jar"),
-                    "/opt/keycloak/providers/grant_type-anonymous-1.0.0-SNAPSHOT.jar"
-            )
+            .withDefaultProviderClasses()
             .waitingFor(
                 Wait.forHttp("/realms/" + REALM_NAME)
                     .forPort(KEYCLOAK_PORT)
@@ -60,109 +60,95 @@ public class AnonymousGrantTypeTests {
 
     
 
-    @Test
-    public void testProcess_WithValidClient_ShouldSuccess() {
-            String tokenUrl = keycloakUrl + "/realms/" + REALM_NAME + "/protocol/openid-connect/token";
-
-            Map<String, String> params = new HashMap<>();
-            params.put("grant_type", GRANT_TYPE);
-            params.put("client_id", CLIENT_NAME);
-
-            Response response = given()
-                .formParams(params)
-                .post(tokenUrl);
-
-            assertEquals(200, response.getStatusCode(), "Should return 200 OK");
-    }
-
-    @Test
-    public void testProcess_WithValidClient_ShouldReturnValidPayload() {
-            String tokenUrl = keycloakUrl + "/realms/" + REALM_NAME + "/protocol/openid-connect/token";
-
-            Map<String, String> params = new HashMap<>();
-            params.put("grant_type", GRANT_TYPE);
-            params.put("client_id", CLIENT_NAME);
-
-            Response response = given()
-                .formParams(params)
-                .post(tokenUrl);
-
-            // Verify the response payload
-            assertEquals("bearer", response.jsonPath().getString("token_type").toLowerCase(),
-                "Token type should be bearer");
-            assertNotNull(response.jsonPath().getString("access_token"), "Access token should not be null");
-            assertEquals("300", response.jsonPath().getString("expires_in"), "Expires in should be 300");
-            assertEquals("openid", response.jsonPath().getString("scope"), "Scope should be openid");
-    }
-
-    @Test
-    public void testProcess_WithInvalidGrantType_ShouldFail() {
-        String tokenUrl = keycloakUrl + "/realms/" + REALM_NAME + "/protocol/openid-connect/token";
-
+    private Response makeTokenRequest(String grantType, String clientId) {
         Map<String, String> params = new HashMap<>();
-        params.put("grant_type", "anonymousss");
-        params.put("client_id", CLIENT_NAME);
+        params.put("grant_type", grantType);
+        params.put("client_id", clientId);
 
-        Response response = given()
+        return given()
                 .formParams(params)
-                .post(tokenUrl);
+                .post(keycloakUrl + TOKEN_URL);
+    }
 
+    @ParameterizedTest
+    @MethodSource("validClientTestCases")
+    public void testProcess_WithValidClient_ShouldSuccess(String clientId) {
+        Response response = makeTokenRequest(GRANT_TYPE, clientId);
+        assertEquals(200, response.getStatusCode(), "Should return 200 OK");
+    }
 
+    @ParameterizedTest
+    @MethodSource("validClientTestCases")
+    public void testProcess_WithValidClient_ShouldReturnValidPayload(String clientId) {
+        Response response = makeTokenRequest(GRANT_TYPE, clientId);
+        
+        // Verify the response payload
+        assertEquals("bearer", response.jsonPath().getString("token_type").toLowerCase(),
+            "Token type should be bearer");
+        assertNotNull(response.jsonPath().getString("access_token"), "Access token should not be null");
+        assertEquals("300", response.jsonPath().getString("expires_in"), "Expires in should be 300");
+        assertEquals("openid", response.jsonPath().getString("scope"), "Scope should be openid");
+    }
+
+    @ParameterizedTest
+    @MethodSource("invalidGrantTypeTestCases")
+    public void testProcess_WithInvalidGrantType_ShouldFail(String clientId, String grantType) {
+        Response response = makeTokenRequest(grantType, clientId);
         assertEquals(400, response.getStatusCode(), "Should return 400");
     }
 
+    @ParameterizedTest
+    @MethodSource("privateClientTestCases")
+    public void testProcess_WithPrivateClient_ShouldFail(String clientId) {
+        Response response = makeTokenRequest(GRANT_TYPE, clientId);
+        assertEquals(401, response.getStatusCode(), "Should return 401");
+    }
 
-    @Test
-    public void testProcess_WithPrivateClient_ShouldFail() {
-        String tokenUrl = keycloakUrl + "/realms/" + REALM_NAME + "/protocol/openid-connect/token";
-
-        Map<String, String> params = new HashMap<>();
-        params.put("grant_type", "anonymousss");
-        params.put("client_id", PRIVATE_CLIENT_NAME);
-
-        Response response = given()
-                .formParams(params)
-                .post(tokenUrl);
-
-
+    @ParameterizedTest
+    @MethodSource("disabledClientTestCases")
+    public void testProcess_WithDisabledClient_ShouldFail(String clientId, String grantType) {
+        Response response = makeTokenRequest(grantType, clientId);
         assertEquals(400, response.getStatusCode(), "Should return 400");
     }
 
-    @Test
-    public void testProcess_WithDisabledClient_ShouldFail() {
-        String tokenUrl = keycloakUrl + "/realms/" + REALM_NAME + "/protocol/openid-connect/token";
+    @ParameterizedTest
+    @MethodSource("invalidClientTestCases")
+    public void testProcess_WithInvalidClient_ShouldReturnError(String clientId) {
+        Response response = makeTokenRequest(GRANT_TYPE, clientId);
 
-        Map<String, String> params = new HashMap<>();
-        params.put("grant_type", "anonymousss");
-        params.put("client_id", PRIVATE_CLIENT_NAME);
-
-        Response response = given()
-                .formParams(params)
-                .post(tokenUrl);
-
-
-        assertEquals(400, response.getStatusCode(), "Should return 400");
-    }
-            
-    @Test
-    public void testProcess_WithInvalidClient_ShouldReturnError() {
-            String tokenUrl = keycloakUrl + "/realms/" + REALM_NAME + "/protocol/openid-connect/token";
-
-            Map<String, String> params = new HashMap<>();
-            params.put("grant_type", GRANT_TYPE);
-            params.put("client_id", "invalidClientId");
-
-            Response response = given()
-                .formParams(params)
-                .post(tokenUrl);
-
-            assertEquals(401, response.getStatusCode(), "Should return 401 Unauthorized");
-            String error = response.jsonPath().getString("error");
-            assertEquals("invalid_client", error, "Should return invalid_client error");
+        assertEquals(401, response.getStatusCode(), "Should return 401 Unauthorized");
+        String error = response.jsonPath().getString("error");
+        assertEquals("invalid_client", error, "Should return invalid_client error");
     }
 
-    @BeforeEach
-    void setup() {
+    private static Stream<String> validClientTestCases() {
+        return Stream.of(CLIENT_NAME);
+    }
+
+    private static Stream<Arguments> invalidGrantTypeTestCases() {
+        return Stream.of(
+            Arguments.of(CLIENT_NAME, "anonymousss"),
+            Arguments.of(CLIENT_NAME, "invalid_grant_type")
+        );
+    }
+
+    private static Stream<String> privateClientTestCases() {
+        return Stream.of(PRIVATE_CLIENT_NAME);
+    }
+
+    private static Stream<Arguments> disabledClientTestCases() {
+        return Stream.of(
+            Arguments.of(PRIVATE_CLIENT_NAME, "anonymousss"),
+            Arguments.of(PRIVATE_CLIENT_NAME, "invalid_grant_type")
+        );
+    }
+
+    private static Stream<String> invalidClientTestCases() {
+        return Stream.of("invalidClientId", "nonexistent-client", "invalid_client");
+    }
+
+    @BeforeAll
+    static void setup() {
         keycloak.start();
 
         String host = keycloak.getHost();
@@ -193,7 +179,7 @@ public class AnonymousGrantTypeTests {
         adminClient.realm(REALM_NAME).clients().create(disabledClient);
     }
 
-    private ClientRepresentation createClient() {
+    private static ClientRepresentation createClient() {
         ClientRepresentation client = new ClientRepresentation();
         client.setClientId(CLIENT_NAME);
         client.setDirectAccessGrantsEnabled(true);
@@ -208,7 +194,7 @@ public class AnonymousGrantTypeTests {
     }
 
 
-    private ClientRepresentation createPrivateClient() {
+    private static ClientRepresentation createPrivateClient() {
         ClientRepresentation client = new ClientRepresentation();
         client.setClientId(CLIENT_NAME);
         client.setDirectAccessGrantsEnabled(true);
@@ -224,7 +210,7 @@ public class AnonymousGrantTypeTests {
     }
 
 
-    private ClientRepresentation createDisabledClient() {
+    private static ClientRepresentation createDisabledClient() {
         ClientRepresentation client = new ClientRepresentation();
         client.setClientId(DISABLED_CLIENT_NAME);
         client.setDirectAccessGrantsEnabled(true);
@@ -237,6 +223,4 @@ public class AnonymousGrantTypeTests {
 
         return client;
     }
-
-    
 }
