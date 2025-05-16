@@ -72,24 +72,41 @@ public class AnonymousGrantType implements OAuth2GrantType {
         );
 
         LOGGER.info("******* ANONYMOUS GRANT TYPE START TOKEN GENERATION *******");
-        AccessToken accessToken = new AccessToken();
+
+        // Create TokenManager which will handle signing with correct keys automatically
+        TokenManager tokenManager = new TokenManager();
         long currentTimeInSeconds = System.currentTimeMillis() / 1000;
+        AccessToken accessToken = tokenManager.createClientAccessToken(
+                session,
+                realm,
+                client,
+                transientUser,
+                userSession,
+                clientSessionCtx
+        );
+
+        accessToken.setEmail(transientUser.getEmail());
+        accessToken.setEmailVerified(true);
         accessToken.exp(currentTimeInSeconds + ACCESS_TOKEN_LIFESPAN);
 
-        AccessTokenResponse tokenResponse = new TokenManager().responseBuilder(
+        // Create token response builder
+        TokenManager.AccessTokenResponseBuilder tokenResponseBuilder = tokenManager.responseBuilder(
                 realm,
                 client,
                 event,
                 session,
                 userSession,
                 clientSessionCtx
-        )
-        .accessToken(accessToken)
-        .generateAccessToken()
-        .build();
+        );
+
+        AccessTokenResponse tokenResponse = tokenResponseBuilder
+                .accessToken(accessToken)
+                .generateAccessToken()
+                .generateRefreshToken()
+                .build();
 
         Map<String, Object> customTokenResponse = formatAccessTokenResponse(tokenResponse);
-        LOGGER.info("******* ANONYMOUS GRANT TYPE TOKEN GENERATED SUCCESSFULLY *******");        
+        LOGGER.info("******* ANONYMOUS GRANT TYPE TOKEN GENERATED SUCCESSFULLY *******");
         Response response = Response.ok(customTokenResponse).build();
 
         // Delete the user after token creation
