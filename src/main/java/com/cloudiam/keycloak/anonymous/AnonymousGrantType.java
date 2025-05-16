@@ -102,7 +102,6 @@ public class AnonymousGrantType implements OAuth2GrantType {
         AccessTokenResponse tokenResponse = tokenResponseBuilder
                 .accessToken(accessToken)
                 .generateAccessToken()
-                .generateRefreshToken()
                 .build();
 
         Map<String, Object> customTokenResponse = formatAccessTokenResponse(tokenResponse);
