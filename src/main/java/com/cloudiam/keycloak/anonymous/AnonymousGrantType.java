@@ -6,14 +6,12 @@ import org.jboss.logging.Logger;
 import org.keycloak.events.EventBuilder;
 import org.keycloak.events.EventType;
 import org.keycloak.models.*;
+import org.keycloak.protocol.oidc.TokenManager.AccessTokenResponseBuilder;
 import org.keycloak.protocol.oidc.TokenManager;
 import org.keycloak.protocol.oidc.grants.OAuth2GrantType;
-import org.keycloak.representations.AccessToken;
 import org.keycloak.representations.AccessTokenResponse;
 import org.keycloak.services.util.DefaultClientSessionContext;
 
-import java.util.HashMap;
-import java.util.Map;
 import java.util.UUID;
 
 public class AnonymousGrantType implements OAuth2GrantType {
@@ -73,40 +71,20 @@ public class AnonymousGrantType implements OAuth2GrantType {
 
         LOGGER.info("******* ANONYMOUS GRANT TYPE START TOKEN GENERATION *******");
 
-        // Create TokenManager which will handle signing with correct keys automatically
         TokenManager tokenManager = new TokenManager();
-        long currentTimeInSeconds = System.currentTimeMillis() / 1000;
-        AccessToken accessToken = tokenManager.createClientAccessToken(
-                session,
-                realm,
-                client,
-                transientUser,
-                userSession,
-                clientSessionCtx
-        );
-
-        accessToken.setEmail(transientUser.getEmail());
-        accessToken.setEmailVerified(true);
-        accessToken.exp(currentTimeInSeconds + ACCESS_TOKEN_LIFESPAN);
-
         // Create token response builder
-        TokenManager.AccessTokenResponseBuilder tokenResponseBuilder = tokenManager.responseBuilder(
-                realm,
-                client,
-                event,
-                session,
-                userSession,
-                clientSessionCtx
-        );
+        AccessTokenResponseBuilder tokenResponseBuilder = tokenManager
+                .responseBuilder(realm, client, event, session, userSession, clientSessionCtx).generateAccessToken();
 
-        AccessTokenResponse tokenResponse = tokenResponseBuilder
-                .accessToken(accessToken)
-                .generateAccessToken()
-                .build();
+        AccessTokenResponse tokenResponse = tokenResponseBuilder.build();
 
-        Map<String, Object> customTokenResponse = formatAccessTokenResponse(tokenResponse);
+        tokenResponse.setExpiresIn(ACCESS_TOKEN_LIFESPAN);
+        tokenResponse.setScope("openid");
+        tokenResponse.setTokenType("Bearer");
+        tokenResponse.setSessionState(null);
+
         LOGGER.info("******* ANONYMOUS GRANT TYPE TOKEN GENERATED SUCCESSFULLY *******");
-        Response response = Response.ok(customTokenResponse).build();
+        Response response = Response.ok(tokenResponse).build();
 
         // Delete the user after token creation
         deleteTransientUser(realm, userSession.getUser());
@@ -129,16 +107,6 @@ public class AnonymousGrantType implements OAuth2GrantType {
         } catch (Exception e) {
             LOGGER.error("Failed to delete user", e);
         }
-    }
-
-    private Map<String, Object> formatAccessTokenResponse(AccessTokenResponse tokenResponse) {
-        Map<String, Object> customTokenResponse = new HashMap<>();
-        customTokenResponse.put("token_type", "Bearer");
-        customTokenResponse.put("access_token", tokenResponse.getToken());
-        customTokenResponse.put("expires_in", ACCESS_TOKEN_LIFESPAN);
-        customTokenResponse.put("scope", "openid");
-
-        return customTokenResponse;
     }
 
     private void validateClient(ClientModel client, RealmModel realm) {

@@ -12,7 +12,6 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.keycloak.admin.client.Keycloak;
-import org.keycloak.admin.client.KeycloakBuilder;
 import org.keycloak.representations.idm.ClientRepresentation;
 import org.testcontainers.containers.Network;
 import org.testcontainers.containers.wait.strategy.Wait;
@@ -52,6 +51,7 @@ public class AnonymousGrantTypeTests {
             .withEnv("KC_HOSTNAME_STRICT_HTTPS", "false")
             .withEnv("KC_HTTP_PORT", String.valueOf(KEYCLOAK_PORT))
             .withDefaultProviderClasses()
+            // Container not initializing without waiting for port availability
             .waitingFor(
                 Wait.forHttp("/realms/" + REALM_NAME)
                     .forPort(KEYCLOAK_PORT)
@@ -108,7 +108,7 @@ public class AnonymousGrantTypeTests {
     @MethodSource("disabledClientTestCases")
     public void testProcess_WithDisabledClient_ShouldFail(String clientId, String grantType) {
         Response response = makeTokenRequest(grantType, clientId);
-        assertEquals(400, response.getStatusCode(), "Should return 400");
+        assertEquals(401, response.getStatusCode(), "Should return 401");
     }
 
     @ParameterizedTest
@@ -138,9 +138,7 @@ public class AnonymousGrantTypeTests {
 
     private static Stream<Arguments> disabledClientTestCases() {
         return Stream.of(
-            Arguments.of(PRIVATE_CLIENT_NAME, "anonymousss"),
-            Arguments.of(PRIVATE_CLIENT_NAME, "invalid_grant_type")
-        );
+            Arguments.of(DISABLED_CLIENT_NAME, "anonymous"));
     }
 
     private static Stream<String> invalidClientTestCases() {
@@ -159,13 +157,7 @@ public class AnonymousGrantTypeTests {
             adminClient.close();
         }
 
-        adminClient = KeycloakBuilder.builder()
-            .serverUrl(keycloakUrl)
-            .realm(REALM_NAME)
-            .clientId("admin-cli")
-            .username(ADMIN_USER)
-            .password(ADMIN_PASSWORD)
-            .build();
+        adminClient = keycloak.getKeycloakAdminClient();
             
         // Add valid test client to master realm for testing
         ClientRepresentation testClient = createClient();

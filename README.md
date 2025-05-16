@@ -35,7 +35,10 @@ This project is a Keycloak extension that adds anonymous grant type support. Fol
       "token_type": "Bearer",
       "access_token": "<access_token>",
       "expires_in": 300,
-      "scope": "openid"
+      "scope": "openid",
+      // Default tokenResponseKeys
+      "refresh_expires_in": 0,
+      "not-before-policy": 0,
    }    
    ```
    
