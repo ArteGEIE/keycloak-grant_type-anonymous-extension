@@ -18,7 +18,7 @@ public class AnonymousGrantType implements OAuth2GrantType {
 
     private static final Logger LOGGER = Logger.getLogger(AnonymousGrantType.class);
     private final KeycloakSession session;
-    private static final Integer ACCESS_TOKEN_LIFESPAN = 300;
+    private static final Integer ACCESS_TOKEN_LIFESPAN = Integer.parseInt(System.getenv("ACCESS_TOKEN_LIFESPAN") != null ? System.getenv("ACCESS_TOKEN_LIFESPAN") : "300");
 
     public AnonymousGrantType(KeycloakSession session) {
         this.session = session;

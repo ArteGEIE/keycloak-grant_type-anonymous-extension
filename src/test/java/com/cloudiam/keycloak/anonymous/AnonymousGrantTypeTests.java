@@ -152,10 +152,6 @@ public class AnonymousGrantTypeTests {
         String host = keycloak.getHost();
         Integer port = keycloak.getMappedPort(KEYCLOAK_PORT);
         keycloakUrl = String.format("http://%s:%d", host, port);
-        
-        if (adminClient != null) {
-            adminClient.close();
-        }
 
         adminClient = keycloak.getKeycloakAdminClient();
             
