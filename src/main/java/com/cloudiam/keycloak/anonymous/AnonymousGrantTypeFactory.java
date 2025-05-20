@@ -8,7 +8,7 @@ import org.keycloak.protocol.oidc.grants.OAuth2GrantType;
 import org.keycloak.protocol.oidc.grants.OAuth2GrantTypeFactory;
 
 public class AnonymousGrantTypeFactory implements OAuth2GrantTypeFactory {
-    private static final Logger logger = Logger.getLogger(AnonymousGrantTypeFactory.class);
+    private static final Logger LOGGER = Logger.getLogger(AnonymousGrantTypeFactory.class);
     public static final String PROVIDER_ID = "anonymous";
 
     @Override
@@ -18,17 +18,17 @@ public class AnonymousGrantTypeFactory implements OAuth2GrantTypeFactory {
 
     @Override
     public void init(Config.Scope config) {
-        logger.info("******** INITIALIZING ANONYMOUS GRANT TYPE FACTORY ********");
+        LOGGER.info("******** INITIALIZING ANONYMOUS GRANT TYPE FACTORY ********");
     }
 
     @Override
     public void postInit(KeycloakSessionFactory factory) {
-        logger.info("******** POST INIT ANONYMOUS GRANT TYPE FACTORY ********");
+        LOGGER.debug("******** POST INIT ANONYMOUS GRANT TYPE FACTORY ********");
     }
 
     @Override
     public void close() {
-        logger.info("******** CLOSING ANONYMOUS GRANT TYPE FACTORY ********");
+        LOGGER.debug("******** CLOSING ANONYMOUS GRANT TYPE FACTORY ********");
     }
 
     @Override
@@ -39,5 +39,9 @@ public class AnonymousGrantTypeFactory implements OAuth2GrantTypeFactory {
     @Override
     public int order() {
         return 100;
+    }
+
+    public String getShortcut() {
+        return "ano";
     }
 }
