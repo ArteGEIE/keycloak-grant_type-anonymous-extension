@@ -1,34 +1,46 @@
 package com.cloudiam.keycloak.anonymous;
 
+import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 
 import org.jboss.logging.Logger;
+import org.keycloak.OAuth2Constants;
+import org.keycloak.common.util.Time;
+import org.keycloak.events.Details;
 import org.keycloak.events.EventBuilder;
 import org.keycloak.events.EventType;
 import org.keycloak.models.*;
+import org.keycloak.models.light.LightweightUserAdapter;
+import org.keycloak.protocol.oidc.OIDCAdvancedConfigWrapper;
 import org.keycloak.protocol.oidc.TokenManager.AccessTokenResponseBuilder;
 import org.keycloak.protocol.oidc.TokenManager;
 import org.keycloak.protocol.oidc.grants.OAuth2GrantType;
+import org.keycloak.protocol.oidc.grants.OAuth2GrantTypeBase;
+import org.keycloak.representations.AccessToken;
 import org.keycloak.representations.AccessTokenResponse;
 import org.keycloak.services.util.DefaultClientSessionContext;
+import org.keycloak.storage.adapter.InMemoryUserAdapter;
+import org.keycloak.util.TokenUtil;
 
 import java.util.UUID;
 
-public class AnonymousGrantType implements OAuth2GrantType {
+import static org.keycloak.models.light.LightweightUserAdapter.isLightweightUser;
+import static org.keycloak.util.TokenUtil.TOKEN_TYPE_BEARER;
+
+public class AnonymousGrantType extends OAuth2GrantTypeBase {
 
     private static final Logger LOGGER = Logger.getLogger(AnonymousGrantType.class);
     private final KeycloakSession session;
-    private static final Integer ACCESS_TOKEN_LIFESPAN = Integer.parseInt(System.getenv("ACCESS_TOKEN_LIFESPAN") != null ? System.getenv("ACCESS_TOKEN_LIFESPAN") : "300");
 
     public AnonymousGrantType(KeycloakSession session) {
         this.session = session;
-        LOGGER.info("******** ANONYMOUS GRANT TYPE PROVIDER INITIALIZED ********");
+        LOGGER.debug("******** ANONYMOUS GRANT TYPE PROVIDER INITIALIZED ********");
     }
 
 
     @Override
     public void close() {
-        LOGGER.info("******** CLOSING ANONYMOUS GRANT TYPE PROVIDER ********");
+        LOGGER.debug("******** CLOSING ANONYMOUS GRANT TYPE PROVIDER ********");
     }
 
     @Override
@@ -38,14 +50,10 @@ public class AnonymousGrantType implements OAuth2GrantType {
 
     @Override
     public Response process(Context context) {
-        RealmModel realm = session.getContext().getRealm();
-        ClientModel client = session.getContext().getClient();
+        setContext(context);
+        event.detail(Details.AUTH_METHOD, "anonymous");
 
-        // Verify client exists
-        validateClient(client, realm);
-
-        UserModel transientUser = createTransientUser(realm);
-        EventBuilder event = new EventBuilder(realm, session, session.getContext().getConnection());
+        UserModel transientUser = createTransientUser();
         event.event(EventType.LOGIN);
 
         UserSessionProvider userSessionProvider = session.getProvider(UserSessionProvider.class);
@@ -62,8 +70,7 @@ public class AnonymousGrantType implements OAuth2GrantType {
             UserSessionModel.SessionPersistenceState.TRANSIENT
         );
 
-        AuthenticatedClientSessionModel clientSession = session.sessions()
-        .createClientSession(realm, client, userSession);
+        AuthenticatedClientSessionModel clientSession = session.sessions().createClientSession(realm, client, userSession);
 
         ClientSessionContext clientSessionCtx = DefaultClientSessionContext.fromClientSessionAndScopeParameter(
             clientSession, null, session
@@ -74,55 +81,67 @@ public class AnonymousGrantType implements OAuth2GrantType {
         TokenManager tokenManager = new TokenManager();
         // Create token response builder
         AccessTokenResponseBuilder tokenResponseBuilder = tokenManager
-                .responseBuilder(realm, client, event, session, userSession, clientSessionCtx).generateAccessToken();
+                .responseBuilder(realm, client, event, session, userSession, clientSessionCtx)
+                .generateAccessToken();
 
-        AccessTokenResponse tokenResponse = tokenResponseBuilder.build();
+        AccessTokenResponse tokenResponse = build(tokenResponseBuilder, userSession, clientSessionCtx);
+        tokenResponse.setScope("anonymous");
 
-        tokenResponse.setExpiresIn(ACCESS_TOKEN_LIFESPAN);
-        tokenResponse.setScope("openid");
-        tokenResponse.setTokenType("Bearer");
-        tokenResponse.setSessionState(null);
+        event.detail(Details.TOKEN_ID, tokenResponseBuilder.getAccessToken().getId());
+        event.success();
 
-        LOGGER.info("******* ANONYMOUS GRANT TYPE TOKEN GENERATED SUCCESSFULLY *******");
-        Response response = Response.ok(tokenResponse).build();
-
-        // Delete the user after token creation
-        deleteTransientUser(realm, userSession.getUser());
-
-        return response;
+        LOGGER.trace("******* ANONYMOUS GRANT TYPE TOKEN GENERATED SUCCESSFULLY *******");
+        return cors.add(Response.ok(tokenResponse).type(MediaType.APPLICATION_JSON_TYPE));
     }
 
-    private UserModel createTransientUser(RealmModel realm) {
-        String anonUsername = "anon-" + UUID.randomUUID();
-        UserModel user = session.users().addUser(realm, anonUsername);
+    public AccessTokenResponse build(AccessTokenResponseBuilder tokenResponseBuilder, UserSessionModel userSession, ClientSessionContext clientSessionCtx) {
+        AccessTokenResponse res = new AccessTokenResponse();
+        AccessToken accessToken = tokenResponseBuilder.getAccessToken();
+        if (accessToken != null) {
+            event.detail(Details.TOKEN_ID, accessToken.getId());
+        }
+
+        if (accessToken != null) {
+            String encodedToken = session.tokens().encode(accessToken);
+            res.setToken(encodedToken);
+            res.setTokenType(formatTokenType(client));
+            res.setSessionState(accessToken.getSessionState());
+            if (accessToken.getExp() != 0) {
+                res.setExpiresIn(accessToken.getExp() - Time.currentTime());
+            }
+        }
+
+        int notBefore = realm.getNotBefore();
+        if (client.getNotBefore() > notBefore) {
+            notBefore = client.getNotBefore();
+        }
+        res.setNotBeforePolicy(notBefore);
+
+        res = tokenManager.transformAccessTokenResponse(session, res, userSession, clientSessionCtx);
+
+        // OIDC Financial API Read Only Profile : scope MUST be returned in the response from Token Endpoint
+        String responseScope = clientSessionCtx.getScopeString();
+        res.setScope(responseScope);
+        event.detail(Details.SCOPE, responseScope);
+
+        return res;
+    }
+
+    private String formatTokenType(ClientModel client) {
+        if (OIDCAdvancedConfigWrapper.fromClientModel(client).isUseLowerCaseInTokenResponse()) {
+            return TokenUtil.TOKEN_TYPE_BEARER.toLowerCase();
+        }
+        return TokenUtil.TOKEN_TYPE_BEARER;
+    }
+
+    private UserModel createTransientUser() {
+        String id = UUID.randomUUID().toString();
+        UserModel user = new LightweightUserAdapter(session, id);
+        user.setUsername("anon-" + id);
         user.setEnabled(true);
         user.setSingleAttribute("anonymous", "true");
 
         return user;
     }
 
-    private void deleteTransientUser(RealmModel realm, UserModel user) {
-        try {
-            session.users().removeUser(realm, user);
-        } catch (Exception e) {
-            LOGGER.error("Failed to delete user", e);
-        }
-    }
-
-    private void validateClient(ClientModel client, RealmModel realm) {
-        if (client == null || realm == null) {
-            LOGGER.warn("Client or realm is null");
-            throw new RuntimeException("Client or realm not found");
-        }
-
-        if(realm.getClientById(client.getId()) == null) {
-            LOGGER.warnf("Client %s not found", client.getId());
-            throw new RuntimeException("Client not found");
-        }
-
-        if (!client.isEnabled()) {
-            LOGGER.warnf("Client %s is not available", client.getId());
-            throw new RuntimeException("Client is disabled");
-        }
-    }
 }
