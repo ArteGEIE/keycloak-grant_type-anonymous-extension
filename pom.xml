@@ -22,13 +22,16 @@
         <wiremock.version>3.0.1</wiremock.version>
         <testcontainers-keycloak.version>3.6.0</testcontainers-keycloak.version>
         <rest-assured.version>5.5.1</rest-assured.version>
+        <logback-classic.version>1.5.18</logback-classic.version>
+        <maven-surefire-plugin.version>3.2.5</maven-surefire-plugin.version>
+        <maven-compiler-plugin.version>3.13.0</maven-compiler-plugin.version>
     </properties>
     <dependencies>
         <dependency>
             <!--        used for test container logback-->
             <groupId>ch.qos.logback</groupId>
             <artifactId>logback-classic</artifactId>
-            <version>1.5.18</version>
+            <version>${logback-classic.version}</version>
             <scope>test</scope>
         </dependency>
 
@@ -108,7 +111,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
-                <version>3.2.5</version>
+                <version>${maven-surefire-plugin.version}</version>
                 <configuration>
                     <includes>
                         <include>**/*Test.java</include>
@@ -122,7 +125,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.13.0</version>
+                <version>${maven-compiler-plugin.version}</version>
                 <configuration>
                     <release>${java.version}</release>
                 </configuration>
