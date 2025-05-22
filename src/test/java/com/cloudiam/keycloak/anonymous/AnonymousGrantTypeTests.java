@@ -3,6 +3,7 @@ package com.cloudiam.keycloak.anonymous;
 import dasniko.testcontainers.keycloak.KeycloakContainer;
 import io.restassured.response.Response;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Collections;
 import java.util.stream.Stream;
@@ -13,6 +14,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.keycloak.admin.client.Keycloak;
 import org.keycloak.representations.idm.ClientRepresentation;
+import org.keycloak.representations.idm.ClientScopeRepresentation;
 import org.slf4j.Logger;
 import org.testcontainers.containers.Network;
 import org.testcontainers.containers.output.Slf4jLogConsumer;
@@ -20,6 +22,7 @@ import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
+import static com.cloudiam.keycloak.anonymous.AnonymousGrantType.ANONYMOUS;
 import static io.restassured.RestAssured.given;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -32,32 +35,13 @@ public class AnonymousGrantTypeTests {
     private static final Network SHARED_NETWORK = Network.newNetwork();
     private static final String ADMIN_USER = "admin";
     private static final String ADMIN_PASSWORD = "admin";
-    private static final int KEYCLOAK_PORT = 8080;
     private static final String CLIENT_NAME = "test-client";
     private static final String PRIVATE_CLIENT_NAME = "private-client";
     private static final String DISABLED_CLIENT_NAME = "disabled-client";
     private static final String REALM_NAME = "master";
     private static final String TOKEN_URL = "/realms/" + REALM_NAME + "/protocol/openid-connect/token";
 
-    private static String keycloakUrl;
-
-    @Container
-    private static final KeycloakContainer keycloak = new KeycloakContainer("quay.io/keycloak/keycloak:25.0.6")
-            .withNetwork(SHARED_NETWORK)
-            .withNetworkAliases("keycloak")
-            .withExposedPorts(KEYCLOAK_PORT)
-            .withLogConsumer(new Slf4jLogConsumer(LOGGER))
-            .withEnv("KEYCLOAK_ADMIN", ADMIN_USER)
-            .withEnv("KEYCLOAK_ADMIN_PASSWORD", ADMIN_PASSWORD)
-            .withEnv("KC_HTTP_ENABLED", "true")
-            .withEnv("KC_HOSTNAME_STRICT", "false")
-            .withEnv("KC_HOSTNAME_STRICT_HTTPS", "false")
-            .withEnv("KC_HTTP_PORT", String.valueOf(KEYCLOAK_PORT))
-            .withDefaultProviderClasses()
-            // Container not initializing without waiting for port availability
-            .waitingFor(Wait.forHttp("/realms/master"));
-
-
+    private static String KEYCLOAK_URL;
 
     private Response makeTokenRequest(String grantType, String clientId) {
         Map<String, String> params = new HashMap<>();
@@ -66,7 +50,7 @@ public class AnonymousGrantTypeTests {
 
         return given()
                 .formParams(params)
-                .post(keycloakUrl + TOKEN_URL);
+                .post(KEYCLOAK_URL + TOKEN_URL);
     }
 
     @ParameterizedTest
@@ -147,26 +131,37 @@ public class AnonymousGrantTypeTests {
 
     @BeforeAll
     static void setup() {
+        var keycloak = createKeycloakContainer();
         keycloak.start();
 
-        keycloakUrl = keycloak.getAuthServerUrl();;
+        KEYCLOAK_URL = keycloak.getAuthServerUrl();;
 
-        Keycloak adminClient = keycloak.getKeycloakAdminClient();
+        var keycloakAdminClient = keycloak.getKeycloakAdminClient();
+
+        var anonymousClientScope = createAnonymousClientScope();
+        keycloakAdminClient.realm(REALM_NAME).clientScopes().create(anonymousClientScope);
 
         // Add valid test client to master realm for testing
-        ClientRepresentation testClient = createClient();
-        adminClient.realm(REALM_NAME).clients().create(testClient);
+        var testClient = createClient();
+        keycloakAdminClient.realm(REALM_NAME).clients().create(testClient);
 
         // Add private and disabled client to master realm for testing
-        ClientRepresentation privateClient = createPrivateClient();
-        adminClient.realm(REALM_NAME).clients().create(privateClient);
+        var privateClient = createPrivateClient();
+        keycloakAdminClient.realm(REALM_NAME).clients().create(privateClient);
 
-        ClientRepresentation disabledClient = createDisabledClient();
-        adminClient.realm(REALM_NAME).clients().create(disabledClient);
+        var disabledClient = createDisabledClient();
+        keycloakAdminClient.realm(REALM_NAME).clients().create(disabledClient);
+    }
+
+    private static ClientScopeRepresentation createAnonymousClientScope() {
+        var clientScope = new ClientScopeRepresentation();
+        clientScope.setName(ANONYMOUS);
+        clientScope.setProtocol("openid-connect");
+        return clientScope;
     }
 
     private static ClientRepresentation createClient() {
-        ClientRepresentation client = new ClientRepresentation();
+        var client = new ClientRepresentation();
         client.setClientId(CLIENT_NAME);
         client.setDirectAccessGrantsEnabled(true);
         client.setStandardFlowEnabled(true);
@@ -174,6 +169,7 @@ public class AnonymousGrantTypeTests {
         client.setRedirectUris(Collections.singletonList("*"));
         client.setProtocol("openid-connect");
         client.setDefaultClientScopes(Collections.singletonList("basic"));
+        client.setOptionalClientScopes(Collections.singletonList(ANONYMOUS));
         client.setEnabled(true);
 
         return client;
@@ -181,7 +177,7 @@ public class AnonymousGrantTypeTests {
 
 
     private static ClientRepresentation createPrivateClient() {
-        ClientRepresentation client = new ClientRepresentation();
+        var client = new ClientRepresentation();
         client.setClientId(CLIENT_NAME);
         client.setDirectAccessGrantsEnabled(true);
         client.setStandardFlowEnabled(true);
@@ -189,7 +185,8 @@ public class AnonymousGrantTypeTests {
         client.setPublicClient(false);
         client.setRedirectUris(Collections.singletonList("*"));
         client.setProtocol("openid-connect");
-        client.setDefaultClientScopes(Collections.singletonList("openid"));
+        client.setDefaultClientScopes(Collections.singletonList("basic"));
+        client.setOptionalClientScopes(Collections.singletonList(ANONYMOUS));
         client.setEnabled(true);
 
         return client;
@@ -197,16 +194,32 @@ public class AnonymousGrantTypeTests {
 
 
     private static ClientRepresentation createDisabledClient() {
-        ClientRepresentation client = new ClientRepresentation();
+        var client = new ClientRepresentation();
         client.setClientId(DISABLED_CLIENT_NAME);
         client.setDirectAccessGrantsEnabled(true);
         client.setStandardFlowEnabled(true);
         client.setPublicClient(true);
         client.setRedirectUris(Collections.singletonList("*"));
         client.setProtocol("openid-connect");
-        client.setDefaultClientScopes(Collections.singletonList("openid"));
+        client.setDefaultClientScopes(Collections.singletonList("basic"));
+        client.setOptionalClientScopes(Collections.singletonList(ANONYMOUS));
         client.setEnabled(false);
 
         return client;
     }
+
+    static KeycloakContainer createKeycloakContainer() {
+        var keycloak = new KeycloakContainer("quay.io/keycloak/keycloak:25.0.6")
+                .withNetwork(SHARED_NETWORK)
+                .withNetworkAliases("keycloak")
+                .withLogConsumer(new Slf4jLogConsumer(LOGGER))
+                .withEnv("KEYCLOAK_ADMIN", ADMIN_USER)
+                .withEnv("KEYCLOAK_ADMIN_PASSWORD", ADMIN_PASSWORD)
+                .withDefaultProviderClasses()
+                // Container not initializing without waiting for port availability
+                .waitingFor(Wait.forHttp("/realms/master"));
+        LOGGER.info("Keycloak container created");
+        return keycloak;
+    }
+
 }

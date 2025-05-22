@@ -12,12 +12,14 @@ import org.keycloak.events.EventType;
 import org.keycloak.models.*;
 import org.keycloak.models.light.LightweightUserAdapter;
 import org.keycloak.protocol.oidc.OIDCAdvancedConfigWrapper;
+import org.keycloak.protocol.oidc.OIDCLoginProtocol;
 import org.keycloak.protocol.oidc.TokenManager.AccessTokenResponseBuilder;
 import org.keycloak.protocol.oidc.TokenManager;
 import org.keycloak.protocol.oidc.grants.OAuth2GrantType;
 import org.keycloak.protocol.oidc.grants.OAuth2GrantTypeBase;
 import org.keycloak.representations.AccessToken;
 import org.keycloak.representations.AccessTokenResponse;
+import org.keycloak.services.Urls;
 import org.keycloak.services.util.DefaultClientSessionContext;
 import org.keycloak.storage.adapter.InMemoryUserAdapter;
 import org.keycloak.util.TokenUtil;
@@ -30,6 +32,7 @@ import static org.keycloak.util.TokenUtil.TOKEN_TYPE_BEARER;
 public class AnonymousGrantType extends OAuth2GrantTypeBase {
 
     private static final Logger LOGGER = Logger.getLogger(AnonymousGrantType.class);
+    public static final String ANONYMOUS = "anonymous";
     private final KeycloakSession session;
 
     public AnonymousGrantType(KeycloakSession session) {
@@ -51,7 +54,7 @@ public class AnonymousGrantType extends OAuth2GrantTypeBase {
     @Override
     public Response process(Context context) {
         setContext(context);
-        event.detail(Details.AUTH_METHOD, "anonymous");
+        event.detail(Details.AUTH_METHOD, ANONYMOUS);
 
         UserModel transientUser = createTransientUser();
         event.event(EventType.LOGIN);
@@ -63,7 +66,7 @@ public class AnonymousGrantType extends OAuth2GrantTypeBase {
             transientUser,
             transientUser.getUsername(),
             session.getContext().getConnection().getRemoteAddr(),
-            "anonymous",
+                ANONYMOUS,
             false,
             null,
             null,
@@ -71,9 +74,9 @@ public class AnonymousGrantType extends OAuth2GrantTypeBase {
         );
 
         AuthenticatedClientSessionModel clientSession = session.sessions().createClientSession(realm, client, userSession);
-
+        clientSession.setNote(OIDCLoginProtocol.ISSUER, Urls.realmIssuer(session.getContext().getUri().getBaseUri(), realm.getName()));
         ClientSessionContext clientSessionCtx = DefaultClientSessionContext.fromClientSessionAndScopeParameter(
-            clientSession, null, session
+            clientSession, ANONYMOUS, session
         );
 
         LOGGER.info("******* ANONYMOUS GRANT TYPE START TOKEN GENERATION *******");
@@ -85,7 +88,7 @@ public class AnonymousGrantType extends OAuth2GrantTypeBase {
                 .generateAccessToken();
 
         AccessTokenResponse tokenResponse = build(tokenResponseBuilder, userSession, clientSessionCtx);
-        tokenResponse.setScope("anonymous");
+
 
         event.detail(Details.TOKEN_ID, tokenResponseBuilder.getAccessToken().getId());
         event.success();
@@ -100,12 +103,10 @@ public class AnonymousGrantType extends OAuth2GrantTypeBase {
         if (accessToken != null) {
             event.detail(Details.TOKEN_ID, accessToken.getId());
         }
-
         if (accessToken != null) {
             String encodedToken = session.tokens().encode(accessToken);
             res.setToken(encodedToken);
             res.setTokenType(formatTokenType(client));
-            res.setSessionState(accessToken.getSessionState());
             if (accessToken.getExp() != 0) {
                 res.setExpiresIn(accessToken.getExp() - Time.currentTime());
             }
@@ -139,7 +140,7 @@ public class AnonymousGrantType extends OAuth2GrantTypeBase {
         UserModel user = new LightweightUserAdapter(session, id);
         user.setUsername("anon-" + id);
         user.setEnabled(true);
-        user.setSingleAttribute("anonymous", "true");
+        user.setSingleAttribute(ANONYMOUS, "true");
 
         return user;
     }
