@@ -12,7 +12,6 @@ services:
       KC_FEATURES: preview,scripts
       KC_LOG_FORMAT: "%d{yyyy-MM-dd HH:mm:ss,SSS} %-5p [%c] (%t) %s%e%n"
       KC_LOG_LEVEL: "INFO,org.hibernate:INFO,com.cloudiam:DEBUG,org.keycloak.authentication:DEBUG"
-      ACCESS_TOKEN_LIFESPAN: ${ACCESS_TOKEN_LIFESPAN}
 
     command:
       - "start-dev"
