@@ -1,31 +1,24 @@
 package com.cloudiam.keycloak.anonymous;
 
 import dasniko.testcontainers.keycloak.KeycloakContainer;
+import io.restassured.http.ContentType;
 import io.restassured.response.Response;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Collections;
-import java.util.stream.Stream;
-import org.junit.jupiter.params.provider.Arguments;
-
 import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.MethodSource;
-import org.keycloak.admin.client.Keycloak;
-import org.keycloak.representations.idm.ClientRepresentation;
-import org.keycloak.representations.idm.ClientScopeRepresentation;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.keycloak.admin.client.CreatedResponseUtil;
 import org.slf4j.Logger;
 import org.testcontainers.containers.Network;
 import org.testcontainers.containers.output.Slf4jLogConsumer;
 import org.testcontainers.containers.wait.strategy.Wait;
-import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
-import static com.cloudiam.keycloak.anonymous.AnonymousGrantType.ANONYMOUS;
+import java.util.HashMap;
+import java.util.Map;
+
+import static com.cloudiam.keycloak.anonymous.Utils.*;
 import static io.restassured.RestAssured.given;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.hamcrest.Matchers.*;
 import static org.slf4j.LoggerFactory.getLogger;
 
 @Testcontainers
@@ -35,180 +28,132 @@ public class AnonymousGrantTypeTests {
     private static final Network SHARED_NETWORK = Network.newNetwork();
     private static final String ADMIN_USER = "admin";
     private static final String ADMIN_PASSWORD = "admin";
-    private static final String CLIENT_NAME = "test-client";
-    private static final String PRIVATE_CLIENT_NAME = "private-client";
-    private static final String DISABLED_CLIENT_NAME = "disabled-client";
     private static final String REALM_NAME = "master";
     private static final String TOKEN_URL = "/realms/" + REALM_NAME + "/protocol/openid-connect/token";
-
     private static String KEYCLOAK_URL;
-
-    private Response makeTokenRequest(String grantType, String clientId) {
-        Map<String, String> params = new HashMap<>();
-        params.put("grant_type", grantType);
-        params.put("client_id", clientId);
-
-        return given()
-                .formParams(params)
-                .post(KEYCLOAK_URL + TOKEN_URL);
-    }
-
-    @ParameterizedTest
-    @MethodSource("validClientTestCases")
-    public void testProcess_WithValidClient_ShouldSuccess(String clientId) {
-        Response response = makeTokenRequest(GRANT_TYPE, clientId);
-        assertEquals(200, response.getStatusCode(), "Should return 200 OK");
-    }
-
-    @ParameterizedTest
-    @MethodSource("validClientTestCases")
-    public void testProcess_WithValidClient_ShouldReturnValidPayload(String clientId) {
-        Response response = makeTokenRequest(GRANT_TYPE, clientId);
-
-        LOGGER.info("response : {}", response.asString());
-        // Verify the response payload
-        assertEquals("bearer", response.jsonPath().getString("token_type").toLowerCase(),
-            "Token type should be bearer");
-        assertNotNull(response.jsonPath().getString("access_token"), "Access token should not be null");
-        assertEquals("60", response.jsonPath().getString("expires_in"), "Expires in should be 300");
-        assertEquals("anonymous", response.jsonPath().getString("scope"), "Scope should be anonymous");
-    }
-
-    @ParameterizedTest
-    @MethodSource("invalidGrantTypeTestCases")
-    public void testProcess_WithInvalidGrantType_ShouldFail(String clientId, String grantType) {
-        Response response = makeTokenRequest(grantType, clientId);
-        assertEquals(400, response.getStatusCode(), "Should return 400");
-    }
-
-    @ParameterizedTest
-    @MethodSource("privateClientTestCases")
-    public void testProcess_WithPrivateClient_ShouldFail(String clientId) {
-        Response response = makeTokenRequest(GRANT_TYPE, clientId);
-        assertEquals(401, response.getStatusCode(), "Should return 401");
-    }
-
-    @ParameterizedTest
-    @MethodSource("disabledClientTestCases")
-    public void testProcess_WithDisabledClient_ShouldFail(String clientId, String grantType) {
-        Response response = makeTokenRequest(grantType, clientId);
-        assertEquals(401, response.getStatusCode(), "Should return 401");
-    }
-
-    @ParameterizedTest
-    @MethodSource("invalidClientTestCases")
-    public void testProcess_WithInvalidClient_ShouldReturnError(String clientId) {
-        Response response = makeTokenRequest(GRANT_TYPE, clientId);
-
-        assertEquals(401, response.getStatusCode(), "Should return 401 Unauthorized");
-        String error = response.jsonPath().getString("error");
-        assertEquals("invalid_client", error, "Should return invalid_client error");
-    }
-
-    private static Stream<String> validClientTestCases() {
-        return Stream.of(CLIENT_NAME);
-    }
-
-    private static Stream<Arguments> invalidGrantTypeTestCases() {
-        return Stream.of(
-            Arguments.of(CLIENT_NAME, "anonymousss"),
-            Arguments.of(CLIENT_NAME, "invalid_grant_type")
-        );
-    }
-
-    private static Stream<String> privateClientTestCases() {
-        return Stream.of(PRIVATE_CLIENT_NAME);
-    }
-
-    private static Stream<Arguments> disabledClientTestCases() {
-        return Stream.of(
-            Arguments.of(DISABLED_CLIENT_NAME, "anonymous"));
-    }
-
-    private static Stream<String> invalidClientTestCases() {
-        return Stream.of("invalidClientId", "nonexistent-client", "invalid_client");
-    }
 
     @BeforeAll
     static void setup() {
         var keycloak = createKeycloakContainer();
         keycloak.start();
 
-        KEYCLOAK_URL = keycloak.getAuthServerUrl();;
+        KEYCLOAK_URL = keycloak.getAuthServerUrl();
 
         var keycloakAdminClient = keycloak.getKeycloakAdminClient();
 
-        var anonymousClientScope = createAnonymousClientScope();
-        keycloakAdminClient.realm(REALM_NAME).clientScopes().create(anonymousClientScope);
+        keycloakAdminClient.realm(REALM_NAME).clientScopes().create(createAnonymousClientScope());
 
         // Add valid test client to master realm for testing
-        var testClient = createClient();
-        keycloakAdminClient.realm(REALM_NAME).clients().create(testClient);
+        keycloakAdminClient.realm(REALM_NAME).clients().create(createClient());
 
-        // Add private and disabled client to master realm for testing
-        var privateClient = createPrivateClient();
-        keycloakAdminClient.realm(REALM_NAME).clients().create(privateClient);
+        // Add valid test-with-mapper client to master realm for testing
+        try (var response = keycloakAdminClient.realm(REALM_NAME).clients().create(createClientWithMapper())) {
+            var createdId = CreatedResponseUtil.getCreatedId(response);
+            var clientResource = keycloakAdminClient.realm(REALM_NAME).clients().get(createdId);
+            clientResource.getProtocolMappers().createMapper(createProtocolMapper());
+        }
 
-        var disabledClient = createDisabledClient();
-        keycloakAdminClient.realm(REALM_NAME).clients().create(disabledClient);
-    }
-
-    private static ClientScopeRepresentation createAnonymousClientScope() {
-        var clientScope = new ClientScopeRepresentation();
-        clientScope.setName(ANONYMOUS);
-        clientScope.setProtocol("openid-connect");
-        return clientScope;
-    }
-
-    private static ClientRepresentation createClient() {
-        var client = new ClientRepresentation();
-        client.setClientId(CLIENT_NAME);
-        client.setDirectAccessGrantsEnabled(true);
-        client.setStandardFlowEnabled(true);
-        client.setPublicClient(true);
-        client.setRedirectUris(Collections.singletonList("*"));
-        client.setProtocol("openid-connect");
-        client.setDefaultClientScopes(Collections.singletonList("basic"));
-        client.setOptionalClientScopes(Collections.singletonList(ANONYMOUS));
-        client.setEnabled(true);
-
-        return client;
+        // Add confidential client to master realm for testing
+        keycloakAdminClient.realm(REALM_NAME).clients().create(createConfidentialClient());
+        // Add disabled client to master realm for testing
+        keycloakAdminClient.realm(REALM_NAME).clients().create(createDisabledClient());
     }
 
 
-    private static ClientRepresentation createPrivateClient() {
-        var client = new ClientRepresentation();
-        client.setClientId(CLIENT_NAME);
-        client.setDirectAccessGrantsEnabled(true);
-        client.setStandardFlowEnabled(true);
-        // Set to false to simulate an invalid client
-        client.setPublicClient(false);
-        client.setRedirectUris(Collections.singletonList("*"));
-        client.setProtocol("openid-connect");
-        client.setDefaultClientScopes(Collections.singletonList("basic"));
-        client.setOptionalClientScopes(Collections.singletonList(ANONYMOUS));
-        client.setEnabled(true);
-
-        return client;
+    @Test
+    @DisplayName("Standard test case should return an access token with scope anonymous")
+    void should_create_anonymous_authentication() {
+        makeTokenRequest(GRANT_TYPE, CLIENT_NAME)
+                .then()
+                .log().body()
+                .assertThat()
+                .statusCode(200)
+                .contentType(ContentType.JSON)
+                .body("access_token", notNullValue())
+                .body("token_type", equalToIgnoringCase("bearer"))
+                .body("expires_in", equalTo(60))
+                .body("scope", equalTo("anonymous"));
     }
 
-
-    private static ClientRepresentation createDisabledClient() {
-        var client = new ClientRepresentation();
-        client.setClientId(DISABLED_CLIENT_NAME);
-        client.setDirectAccessGrantsEnabled(true);
-        client.setStandardFlowEnabled(true);
-        client.setPublicClient(true);
-        client.setRedirectUris(Collections.singletonList("*"));
-        client.setProtocol("openid-connect");
-        client.setDefaultClientScopes(Collections.singletonList("basic"));
-        client.setOptionalClientScopes(Collections.singletonList(ANONYMOUS));
-        client.setEnabled(false);
-
-        return client;
+    @Test
+    @DisplayName("Invalid grant type should be rejected")
+    void should_reject_invalid_grant_type() {
+        makeTokenRequest("unknown_grant_type", CLIENT_NAME)
+                .then()
+                .log().body()
+                .assertThat()
+                .statusCode(400)
+                .body("error", equalTo("unsupported_grant_type"))
+                .body("error_description", equalTo("Unsupported grant_type"));
     }
 
-    static KeycloakContainer createKeycloakContainer() {
+    @Test
+    @DisplayName("A client with mapper should return an access token with scope anonymous")
+    void should_create_anonymous_authentication_with_mapper_enabled() {
+        makeTokenRequest(GRANT_TYPE, CLIENT_WITH_MAPPER_NAME)
+                .then()
+                .log().body()
+                .assertThat()
+                .statusCode(200)
+                .contentType(ContentType.JSON)
+                .body("access_token", notNullValue())
+                .body("token_type", equalToIgnoringCase("bearer"))
+                .body("expires_in", equalTo(60))
+                .body("scope", equalTo("anonymous"));
+    }
+
+    @Test
+    @DisplayName("Confidential client should require a client secret")
+    public void should_require_a_client_secret() {
+        makeTokenRequest(GRANT_TYPE, CONFIDENTIAL_CLIENT_NAME)
+                .then()
+                .log().body()
+                .assertThat()
+                .statusCode(401)
+                .body("error", equalTo("unauthorized_client"))
+                .body("error_description", equalTo("Invalid client or Invalid client credentials"));
+    }
+
+    @Test
+    @DisplayName("Confidential client with client_secret should success")
+    public void should_create_anonymous_authentication_with_confidential_client() {
+        makeTokenRequest(GRANT_TYPE, CONFIDENTIAL_CLIENT_NAME, CONFIDENTIAL_CLIENT_SECRET)
+                .then()
+                .log().body()
+                .assertThat()
+                .statusCode(200)
+                .contentType(ContentType.JSON)
+                .body("access_token", notNullValue())
+                .body("token_type", equalToIgnoringCase("bearer"))
+                .body("expires_in", equalTo(60))
+                .body("scope", equalTo("anonymous"));
+    }
+
+    @Test
+    @DisplayName("Disabled clients should not authenticate")
+    public void should_reject_disabled_client() {
+        makeTokenRequest(GRANT_TYPE, DISABLED_CLIENT_NAME)
+                .then()
+                .log().body()
+                .assertThat()
+                .statusCode(401)
+                .body("error", equalTo("invalid_client"))
+                .body("error_description", equalTo("Invalid client or Invalid client credentials"));
+    }
+
+    @Test
+    @DisplayName("Unknown client should not authenticate")
+    public void should_reject_unknown_client() {
+        makeTokenRequest(GRANT_TYPE, "unknown_client")
+                .then()
+                .log().body()
+                .assertThat()
+                .statusCode(401)
+                .body("error", equalTo("invalid_client"))
+                .body("error_description", equalTo("Invalid client or Invalid client credentials"));
+    }
+
+    private static KeycloakContainer createKeycloakContainer() {
         var keycloak = new KeycloakContainer("quay.io/keycloak/keycloak:25.0.6")
                 .withNetwork(SHARED_NETWORK)
                 .withNetworkAliases("keycloak")
@@ -220,6 +165,24 @@ public class AnonymousGrantTypeTests {
                 .waitingFor(Wait.forHttp("/realms/master"));
         LOGGER.info("Keycloak container created");
         return keycloak;
+    }
+
+    private Response makeTokenRequest(String grantType, String clientId) {
+        return makeTokenRequest(grantType, clientId, null);
+    }
+
+    private Response makeTokenRequest(String grantType, String clientId, String clientSecret) {
+        Map<String, String> params = new HashMap<>();
+        params.put("grant_type", grantType);
+        params.put("client_id", clientId);
+
+        if (clientSecret != null) {
+            params.put("client_secret", clientSecret);
+        }
+
+        return given()
+                .formParams(params)
+                .post(KEYCLOAK_URL + TOKEN_URL);
     }
 
 }

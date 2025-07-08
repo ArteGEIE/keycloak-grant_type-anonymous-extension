@@ -2,32 +2,26 @@ package com.cloudiam.keycloak.anonymous;
 
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
-
 import org.jboss.logging.Logger;
-import org.keycloak.OAuth2Constants;
 import org.keycloak.common.util.Time;
+import org.keycloak.common.util.reflections.Reflections;
 import org.keycloak.events.Details;
-import org.keycloak.events.EventBuilder;
 import org.keycloak.events.EventType;
 import org.keycloak.models.*;
 import org.keycloak.models.light.LightweightUserAdapter;
 import org.keycloak.protocol.oidc.OIDCAdvancedConfigWrapper;
 import org.keycloak.protocol.oidc.OIDCLoginProtocol;
-import org.keycloak.protocol.oidc.TokenManager.AccessTokenResponseBuilder;
 import org.keycloak.protocol.oidc.TokenManager;
-import org.keycloak.protocol.oidc.grants.OAuth2GrantType;
+import org.keycloak.protocol.oidc.TokenManager.AccessTokenResponseBuilder;
 import org.keycloak.protocol.oidc.grants.OAuth2GrantTypeBase;
 import org.keycloak.representations.AccessToken;
 import org.keycloak.representations.AccessTokenResponse;
 import org.keycloak.services.Urls;
 import org.keycloak.services.util.DefaultClientSessionContext;
-import org.keycloak.storage.adapter.InMemoryUserAdapter;
 import org.keycloak.util.TokenUtil;
 
+import java.lang.reflect.Field;
 import java.util.UUID;
-
-import static org.keycloak.models.light.LightweightUserAdapter.isLightweightUser;
-import static org.keycloak.util.TokenUtil.TOKEN_TYPE_BEARER;
 
 public class AnonymousGrantType extends OAuth2GrantTypeBase {
 
@@ -138,6 +132,18 @@ public class AnonymousGrantType extends OAuth2GrantTypeBase {
     private UserModel createTransientUser() {
         String id = UUID.randomUUID().toString();
         UserModel user = new LightweightUserAdapter(session, id);
+
+        // Reflection to set up realm of the user, is fixed in 26.1.0 with new LightweightUserAdapter(session, realm, id);
+        Field field = Reflections.findDeclaredField(user.getClass(), "realm");
+        if (field != null) {
+            field.setAccessible(true);
+            try {
+                field.set(user, realm);
+            } catch (IllegalAccessException e) {
+                LOGGER.error("Fail to set realm on the user", e);
+                throw new IllegalArgumentException("Fail to set realm on the user", e);
+            }
+        }
         user.setUsername("anon-" + id);
         user.setEnabled(true);
         user.setSingleAttribute(ANONYMOUS, "true");
