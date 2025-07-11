@@ -6,7 +6,10 @@ import io.restassured.response.Response;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.keycloak.TokenVerifier;
 import org.keycloak.admin.client.CreatedResponseUtil;
+import org.keycloak.common.VerificationException;
+import org.keycloak.representations.AccessToken;
 import org.slf4j.Logger;
 import org.testcontainers.containers.Network;
 import org.testcontainers.containers.output.Slf4jLogConsumer;
@@ -16,15 +19,17 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import java.util.HashMap;
 import java.util.Map;
 
+import static com.cloudiam.keycloak.anonymous.AnonymousGrantType.ANONYMOUS;
 import static com.cloudiam.keycloak.anonymous.Utils.*;
 import static io.restassured.RestAssured.given;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.*;
 import static org.slf4j.LoggerFactory.getLogger;
 
 @Testcontainers
 public class AnonymousGrantTypeTests {
     private static final Logger LOGGER = getLogger(AnonymousGrantTypeTests.class);
-    private static final String GRANT_TYPE = "anonymous";
+    private static final String GRANT_TYPE = ANONYMOUS;
     private static final Network SHARED_NETWORK = Network.newNetwork();
     private static final String ADMIN_USER = "admin";
     private static final String ADMIN_PASSWORD = "admin";
@@ -62,8 +67,8 @@ public class AnonymousGrantTypeTests {
 
     @Test
     @DisplayName("Standard test case should return an access token with scope anonymous")
-    void should_create_anonymous_authentication() {
-        makeTokenRequest(GRANT_TYPE, CLIENT_NAME)
+    void should_create_anonymous_authentication() throws VerificationException {
+        String accessToken = makeTokenRequest(GRANT_TYPE, CLIENT_NAME)
                 .then()
                 .log().body()
                 .assertThat()
@@ -72,7 +77,14 @@ public class AnonymousGrantTypeTests {
                 .body("access_token", notNullValue())
                 .body("token_type", equalToIgnoringCase("bearer"))
                 .body("expires_in", equalTo(60))
-                .body("scope", equalTo("anonymous"));
+                .body("scope", equalTo(ANONYMOUS))
+                .extract().path("access_token");
+
+        TokenVerifier<AccessToken> verifier = TokenVerifier.create(accessToken, AccessToken.class);
+        AccessToken token = verifier.parse().getToken();
+        Object anonymousClaim = token.getOtherClaims().get(ANONYMOUS);
+
+        assertThat(anonymousClaim).isNotNull().isEqualTo("true");
     }
 
     @Test
@@ -99,7 +111,7 @@ public class AnonymousGrantTypeTests {
                 .body("access_token", notNullValue())
                 .body("token_type", equalToIgnoringCase("bearer"))
                 .body("expires_in", equalTo(60))
-                .body("scope", equalTo("anonymous"));
+                .body("scope", equalTo(ANONYMOUS));
     }
 
     @Test
@@ -126,7 +138,7 @@ public class AnonymousGrantTypeTests {
                 .body("access_token", notNullValue())
                 .body("token_type", equalToIgnoringCase("bearer"))
                 .body("expires_in", equalTo(60))
-                .body("scope", equalTo("anonymous"));
+                .body("scope", equalTo(ANONYMOUS));
     }
 
     @Test

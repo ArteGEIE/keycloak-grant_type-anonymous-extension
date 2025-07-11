@@ -94,10 +94,12 @@ public class AnonymousGrantType extends OAuth2GrantTypeBase {
     public AccessTokenResponse build(AccessTokenResponseBuilder tokenResponseBuilder, UserSessionModel userSession, ClientSessionContext clientSessionCtx) {
         AccessTokenResponse res = new AccessTokenResponse();
         AccessToken accessToken = tokenResponseBuilder.getAccessToken();
+
+
         if (accessToken != null) {
             event.detail(Details.TOKEN_ID, accessToken.getId());
-        }
-        if (accessToken != null) {
+            accessToken.setOtherClaims(ANONYMOUS, "true");
+
             String encodedToken = session.tokens().encode(accessToken);
             res.setToken(encodedToken);
             res.setTokenType(formatTokenType(client));
