@@ -98,7 +98,7 @@ public class AnonymousGrantType extends OAuth2GrantTypeBase {
 
         if (accessToken != null) {
             event.detail(Details.TOKEN_ID, accessToken.getId());
-            accessToken.setOtherClaims(ANONYMOUS, "true");
+            accessToken.setOtherClaims(ANONYMOUS, true);
 
             String encodedToken = session.tokens().encode(accessToken);
             res.setToken(encodedToken);

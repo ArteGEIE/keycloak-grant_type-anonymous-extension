@@ -84,7 +84,7 @@ public class AnonymousGrantTypeTests {
         AccessToken token = verifier.parse().getToken();
         Object anonymousClaim = token.getOtherClaims().get(ANONYMOUS);
 
-        assertThat(anonymousClaim).isNotNull().isEqualTo("true");
+        assertThat(anonymousClaim).isNotNull().isEqualTo(true);
     }
 
     @Test
