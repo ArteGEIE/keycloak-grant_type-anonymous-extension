@@ -76,7 +76,7 @@ public class AnonymousGrantTypeTests {
                 .contentType(ContentType.JSON)
                 .body("access_token", notNullValue())
                 .body("token_type", equalToIgnoringCase("bearer"))
-                .body("expires_in", equalTo(60))
+                .body("expires_in", equalTo(5 * 365 * 24 * 60 * 60)) // 5 years expiration for anonymous user
                 .body("scope", equalTo(ANONYMOUS))
                 .extract().path("access_token");
 
@@ -110,7 +110,7 @@ public class AnonymousGrantTypeTests {
                 .contentType(ContentType.JSON)
                 .body("access_token", notNullValue())
                 .body("token_type", equalToIgnoringCase("bearer"))
-                .body("expires_in", equalTo(60))
+                .body("expires_in", equalTo(5 * 365 * 24 * 60 * 60)) // 5 years expiration for anonymous user
                 .body("scope", equalTo(ANONYMOUS));
     }
 
@@ -137,7 +137,7 @@ public class AnonymousGrantTypeTests {
                 .contentType(ContentType.JSON)
                 .body("access_token", notNullValue())
                 .body("token_type", equalToIgnoringCase("bearer"))
-                .body("expires_in", equalTo(60))
+                .body("expires_in", equalTo(5 * 365 * 24 * 60 * 60)) // 5 years expiration for anonymous user
                 .body("scope", equalTo(ANONYMOUS));
     }
 

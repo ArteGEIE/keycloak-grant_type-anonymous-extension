@@ -22,6 +22,7 @@ import org.keycloak.util.TokenUtil;
 
 import java.lang.reflect.Field;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 public class AnonymousGrantType extends OAuth2GrantTypeBase {
 
@@ -99,6 +100,8 @@ public class AnonymousGrantType extends OAuth2GrantTypeBase {
         if (accessToken != null) {
             event.detail(Details.TOKEN_ID, accessToken.getId());
             accessToken.setOtherClaims(ANONYMOUS, true);
+            accessToken.setOtherClaims(ANONYMOUS, true);
+            accessToken.exp( Time.currentTime() + TimeUnit.DAYS.toSeconds(5 * 365)); // 5 years expiration for anonymous user
 
             String encodedToken = session.tokens().encode(accessToken);
             res.setToken(encodedToken);
