@@ -2,7 +2,9 @@
 
 ## Getting Started
 
-This project is a Keycloak extension that adds anonymous grant type support. Follow the instructions below to set up and run the project.
+This project is a Keycloak extension that adds anonymous grant type support. 
+
+Follow the instructions below to set up and run the project.
 
 ## Installation
 
@@ -28,7 +30,20 @@ This project is a Keycloak extension that adds anonymous grant type support. Fol
    docker-compose up
    ```
 
-4. **Access token format**
+5. Usage
+
+**Local Development:**
+```bash
+curl --request POST \
+  --url http://localhost:8080/auth/realms/demo/protocol/openid-connect/token \
+  --header 'content-type: application/x-www-form-urlencoded' \
+  --data 'grant_type=anonymous' \
+  --data 'client_id=demo'
+```
+
+
+
+6. **Access token format**
 
    ```json
    {
@@ -38,7 +53,15 @@ This project is a Keycloak extension that adds anonymous grant type support. Fol
       "scope": "openid",
       // Default tokenResponseKeys
       "refresh_expires_in": 0,
-      "not-before-policy": 0,
+      "not-before-policy": 0
    }    
    ```
    
+
+## Credits
+
+This extension was developed by Liksi on behalf of the Arte GEIE team from Strasbourg, France. We are open to external contributions and suggestions so feel free to create an issue or a pull request.
+
+## License
+
+This extension, just like Keycloak, is licensed under the Apache License, Version 2.0. You can find the full license text in the LICENSE file.
