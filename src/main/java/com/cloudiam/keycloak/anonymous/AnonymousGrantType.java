@@ -53,6 +53,7 @@ public class AnonymousGrantType extends OAuth2GrantTypeBase {
 
         UserModel transientUser = createTransientUser();
         event.event(EventType.LOGIN);
+        event.user(transientUser);
 
         UserSessionProvider userSessionProvider = session.getProvider(UserSessionProvider.class);
         UserSessionModel userSession = userSessionProvider.createUserSession(
