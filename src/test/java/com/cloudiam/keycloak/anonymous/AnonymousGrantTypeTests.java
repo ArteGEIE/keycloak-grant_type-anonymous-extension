@@ -166,7 +166,7 @@ public class AnonymousGrantTypeTests {
     }
 
     private static KeycloakContainer createKeycloakContainer() {
-        var keycloak = new KeycloakContainer("quay.io/keycloak/keycloak:26.3.4")
+        var keycloak = new KeycloakContainer("quay.io/keycloak/keycloak:26.6.3")
                 .withNetwork(SHARED_NETWORK)
                 .withNetworkAliases("keycloak")
                 .withLogConsumer(new Slf4jLogConsumer(LOGGER))
