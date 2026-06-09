@@ -4,10 +4,15 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import org.jboss.logging.Logger;
 import org.keycloak.common.util.Time;
-import org.keycloak.common.util.reflections.Reflections;
 import org.keycloak.events.Details;
 import org.keycloak.events.EventType;
-import org.keycloak.models.*;
+import org.keycloak.models.AuthenticatedClientSessionModel;
+import org.keycloak.models.ClientModel;
+import org.keycloak.models.ClientSessionContext;
+import org.keycloak.models.KeycloakSession;
+import org.keycloak.models.UserModel;
+import org.keycloak.models.UserSessionModel;
+import org.keycloak.models.UserSessionProvider;
 import org.keycloak.models.light.LightweightUserAdapter;
 import org.keycloak.protocol.oidc.OIDCAdvancedConfigWrapper;
 import org.keycloak.protocol.oidc.OIDCLoginProtocol;
@@ -20,7 +25,7 @@ import org.keycloak.services.Urls;
 import org.keycloak.services.util.DefaultClientSessionContext;
 import org.keycloak.util.TokenUtil;
 
-import java.lang.reflect.Field;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
@@ -47,6 +52,21 @@ public class AnonymousGrantType extends OAuth2GrantTypeBase {
     }
 
     @Override
+    public boolean isTokenAllowed(KeycloakSession session, AccessToken token) {
+        return super.isTokenAllowed(session, token);
+    }
+
+    @Override
+    public Set<String> getSupportedMultivaluedRequestParameters() {
+        return super.getSupportedMultivaluedRequestParameters();
+    }
+
+    @Override
+    public Set<String> getTokenParameterNames() {
+        return Set.of();
+    }
+
+    @Override
     public Response process(Context context) {
         setContext(context);
         event.detail(Details.AUTH_METHOD, ANONYMOUS);
@@ -57,22 +77,22 @@ public class AnonymousGrantType extends OAuth2GrantTypeBase {
 
         UserSessionProvider userSessionProvider = session.getProvider(UserSessionProvider.class);
         UserSessionModel userSession = userSessionProvider.createUserSession(
-            UUID.randomUUID().toString(),
-            realm,
-            transientUser,
-            transientUser.getUsername(),
-            session.getContext().getConnection().getRemoteAddr(),
+                UUID.randomUUID().toString(),
+                realm,
+                transientUser,
+                transientUser.getUsername(),
+                session.getContext().getConnection().getRemoteAddr(),
                 ANONYMOUS,
-            false,
-            null,
-            null,
-            UserSessionModel.SessionPersistenceState.TRANSIENT
+                false,
+                null,
+                null,
+                UserSessionModel.SessionPersistenceState.TRANSIENT
         );
 
         AuthenticatedClientSessionModel clientSession = session.sessions().createClientSession(realm, client, userSession);
         clientSession.setNote(OIDCLoginProtocol.ISSUER, Urls.realmIssuer(session.getContext().getUri().getBaseUri(), realm.getName()));
         ClientSessionContext clientSessionCtx = DefaultClientSessionContext.fromClientSessionAndScopeParameter(
-            clientSession, ANONYMOUS, session
+                clientSession, ANONYMOUS, session
         );
 
         LOGGER.info("******* ANONYMOUS GRANT TYPE START TOKEN GENERATION *******");
@@ -102,7 +122,7 @@ public class AnonymousGrantType extends OAuth2GrantTypeBase {
             event.detail(Details.TOKEN_ID, accessToken.getId());
             accessToken.setOtherClaims(ANONYMOUS, true);
             accessToken.setOtherClaims(ANONYMOUS, true);
-            accessToken.exp( Time.currentTime() + TimeUnit.DAYS.toSeconds(5 * 365)); // 5 years expiration for anonymous user
+            accessToken.exp(Time.currentTime() + TimeUnit.DAYS.toSeconds(5 * 365)); // 5 years expiration for anonymous user
 
             String encodedToken = session.tokens().encode(accessToken);
             res.setToken(encodedToken);
@@ -137,23 +157,10 @@ public class AnonymousGrantType extends OAuth2GrantTypeBase {
 
     private UserModel createTransientUser() {
         String id = UUID.randomUUID().toString();
-        UserModel user = new LightweightUserAdapter(session, id);
-
-        // Reflection to set up realm of the user, is fixed in 26.1.0 with new LightweightUserAdapter(session, realm, id);
-        Field field = Reflections.findDeclaredField(user.getClass(), "realm");
-        if (field != null) {
-            field.setAccessible(true);
-            try {
-                field.set(user, realm);
-            } catch (IllegalAccessException e) {
-                LOGGER.error("Fail to set realm on the user", e);
-                throw new IllegalArgumentException("Fail to set realm on the user", e);
-            }
-        }
+        UserModel user = new LightweightUserAdapter(session, realm, id);
         user.setUsername("anon-" + id);
         user.setEnabled(true);
         user.setSingleAttribute(ANONYMOUS, "true");
-
         return user;
     }
 

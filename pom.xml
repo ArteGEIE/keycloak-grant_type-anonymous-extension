@@ -13,12 +13,12 @@
         <revision>1.0.${buildnumber}</revision>
         <maven.compiler.source>${java.version}</maven.compiler.source>
         <maven.compiler.target>${java.version}</maven.compiler.target>
-        <keycloak.version>26.3.4</keycloak.version>
+        <keycloak.version>26.6.3</keycloak.version>
         <assertj-core.version>3.27.3</assertj-core.version>
         <mockito.version>5.16.0</mockito.version>
-        <junit-jupiter.version>5.12.0</junit-jupiter.version>
-        <testcontainer-junit-jupiter.version>1.20.6</testcontainer-junit-jupiter.version>
-        <testcontainers-keycloak.version>3.6.0</testcontainers-keycloak.version>
+        <junit-jupiter.version>5.13.4</junit-jupiter.version>
+        <testcontainer-junit-jupiter.version>1.21.4</testcontainer-junit-jupiter.version>
+        <testcontainers-keycloak.version>3.9.1</testcontainers-keycloak.version>
         <rest-assured.version>5.5.1</rest-assured.version>
         <logback-classic.version>1.5.18</logback-classic.version>
         <maven-surefire-plugin.version>3.2.5</maven-surefire-plugin.version>
