@@ -52,11 +52,6 @@ public class AnonymousGrantType extends OAuth2GrantTypeBase {
     }
 
     @Override
-    public boolean isTokenAllowed(KeycloakSession session, AccessToken token) {
-        return super.isTokenAllowed(session, token);
-    }
-
-    @Override
     public Set<String> getSupportedMultivaluedRequestParameters() {
         return super.getSupportedMultivaluedRequestParameters();
     }
